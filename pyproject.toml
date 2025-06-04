@@ -22,7 +22,7 @@ dependencies = [
     "PyOpenGL",
     "websockets",
     "glfw",
-    "cuda-python"
+    "cuda-python; sys_platform != 'darwin'"
 ]
 
 [project.urls]
