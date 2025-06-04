@@ -1,5 +1,6 @@
 import glfw
 import numpy as np
+import logging
 from . import Camera
 from ...types import ViewerMode
 from imgui_bundle import imgui
@@ -31,20 +32,21 @@ class FPSCamera(Camera):
         self.current_type = "FPS"
 
     def setup(self):
-        self.movement_keys = {
-            "w": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_W))],
-            "a": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_A))],
-            "s": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_S))],
-            "d": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_D))],
-            "q": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_Q))],
-            "e": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_E))],
-            "j": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_J))],
-            "k": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_K))],
-            "l": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_L))],
-            "i": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_I))],
-            "o": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_O))],
-            "u": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_U))],
-        }
+        if self.mode != ViewerMode.SERVER:
+            self.movement_keys = {
+                "w": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_W))],
+                "a": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_A))],
+                "s": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_S))],
+                "d": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_D))],
+                "q": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_Q))],
+                "e": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_E))],
+                "j": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_J))],
+                "k": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_K))],
+                "l": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_L))],
+                "i": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_I))],
+                "o": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_O))],
+                "u": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_U))],
+            }
 
     def process_mouse_input(self) -> bool:
         if imgui.is_mouse_dragging(0):
@@ -64,31 +66,34 @@ class FPSCamera(Camera):
         return False
 
     def process_keyboard_input(self) -> bool:
-        if imgui.is_key_down(self.movement_keys["w"]):
-            self.origin_motion += self.forward
-        if imgui.is_key_down(self.movement_keys["a"]):
-            self.origin_motion -= self.right
-        if imgui.is_key_down(self.movement_keys["q"]):
-            self.origin_motion -= self.up
-        if imgui.is_key_down(self.movement_keys["s"]):
-            self.origin_motion -= self.forward
-        if imgui.is_key_down(self.movement_keys["d"]):
-            self.origin_motion += self.right
-        if imgui.is_key_down(self.movement_keys["e"]):
-            self.origin_motion += self.up
+        if self.mode != ViewerMode.SERVER:
+            if imgui.is_key_down(self.movement_keys["w"]):
+                self.origin_motion += self.forward
+            if imgui.is_key_down(self.movement_keys["a"]):
+                self.origin_motion -= self.right
+            if imgui.is_key_down(self.movement_keys["q"]):
+                self.origin_motion -= self.up
+            if imgui.is_key_down(self.movement_keys["s"]):
+                self.origin_motion -= self.forward
+            if imgui.is_key_down(self.movement_keys["d"]):
+                self.origin_motion += self.right
+            if imgui.is_key_down(self.movement_keys["e"]):
+                self.origin_motion += self.up
 
-        if imgui.is_key_down(self.movement_keys["o"]):
-            self.rotation_motion[0] += 50 * self.radians_per_pixel
-        if imgui.is_key_down(self.movement_keys["u"]):
-            self.rotation_motion[0] -= 50 * self.radians_per_pixel
-        if imgui.is_key_down(self.movement_keys["i"]):
-            self.rotation_motion[1] += 50 * self.radians_per_pixel
-        if imgui.is_key_down(self.movement_keys["k"]):
-            self.rotation_motion[1] -= 50 * self.radians_per_pixel
-        if imgui.is_key_down(self.movement_keys["j"]):
-            self.rotation_motion[2] += 50 * self.radians_per_pixel
-        if imgui.is_key_down(self.movement_keys["l"]):
-            self.rotation_motion[2] -= 50 * self.radians_per_pixel
+            if imgui.is_key_down(self.movement_keys["o"]):
+                self.rotation_motion[0] += 50 * self.radians_per_pixel
+            if imgui.is_key_down(self.movement_keys["u"]):
+                self.rotation_motion[0] -= 50 * self.radians_per_pixel
+            if imgui.is_key_down(self.movement_keys["i"]):
+                self.rotation_motion[1] += 50 * self.radians_per_pixel
+            if imgui.is_key_down(self.movement_keys["k"]):
+                self.rotation_motion[1] -= 50 * self.radians_per_pixel
+            if imgui.is_key_down(self.movement_keys["j"]):
+                self.rotation_motion[2] += 50 * self.radians_per_pixel
+            if imgui.is_key_down(self.movement_keys["l"]):
+                self.rotation_motion[2] -= 50 * self.radians_per_pixel
+        else:
+            logging.warning("Unexpected keyboard input for server camera")
 
     def show_gui(self):
         # Sliders
