@@ -36,7 +36,7 @@ class Viewer(ABC):
         self.mode = mode
 
         # Import server specific modules
-        if self.mode in LOCAL_SERVER:
+        if self.mode and LOCAL_SERVER:
             self.import_server_modules()
 
     def _setup(self):
@@ -69,7 +69,7 @@ class Viewer(ABC):
         if self.mode is SERVER:
             self._server_recv(websocket)
 
-        if self.mode in LOCAL_SERVER:
+        if self.mode and LOCAL_SERVER:
             self.step()
 
         if self.mode is SERVER:
@@ -83,7 +83,7 @@ class Viewer(ABC):
                 self.websocket.close()
                 self.websocket = None
 
-        if self.mode in LOCAL_CLIENT:
+        if self.mode and LOCAL_CLIENT:
             self.show_gui()
     
     def _server_loop(self, websocket: ServerConnection):
@@ -285,7 +285,7 @@ class Viewer(ABC):
             # Make the thread a daemon so that it exits when the main thread exits.
             connect_thread.daemon = True
             connect_thread.start()
-        if self.mode in LOCAL_CLIENT:
+        if self.mode and LOCAL_CLIENT:
             self._runner_params = hello_imgui.RunnerParams()
             self._runner_params.fps_idling.enable_idling = False
             self._runner_params.app_window_params.window_geometry.window_size_state = hello_imgui.WindowSizeState.maximized

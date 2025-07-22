@@ -431,7 +431,6 @@ class EllipsoidViewer(Widget):
         res_x = self._color_texture.res_x
         res_y = self._color_texture.res_y
         if draw_list is not None:
-            # Figure out
-            draw_list.add_image(self._color_texture.id, (0, 0), (res_x, res_y))
+            draw_list.add_image(self._color_texture.tex_ref, (0, 0), (res_x, res_y))
         else:
-            imgui.image(self._color_texture.id, (res_x, res_y))
+            imgui.image(self._color_texture.tex_ref, (res_x, res_y))

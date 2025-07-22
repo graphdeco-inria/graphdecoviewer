@@ -1,10 +1,13 @@
 from OpenGL import *
-from enum import Flag
+from enum import IntFlag, auto
+from imgui_bundle import imgui, __version__ as imgui_version
 
-class ViewerMode(Flag):
-    LOCAL = 0
-    SERVER = 1
-    CLIENT = 2
+IMGUI_192 = tuple(map(int, imgui_version.split("."))) >= (1,92,0)
+
+class ViewerMode(IntFlag):
+    LOCAL = auto()
+    SERVER = auto()
+    CLIENT = auto()
 
 # Aliases for easy access
 LOCAL = ViewerMode.LOCAL
@@ -21,6 +24,32 @@ class Texture2D:
     exture, use the OpenGL API for that. It is the responsibility of the
     application to update the state of the texture when and if needed.
     """
-    res_x = -1
-    res_y = -1
-    id = -1
+    def __init__(self):
+        self.res_x = -1
+        self.res_y = -1
+        # There was an API change in ImGui v1.92.0 where all texture related functions expect
+        # ImTextureRef instead of ImTextureID.
+        if IMGUI_192:
+            self._id = imgui.ImTextureRef(-1)
+        else:
+            self._id = -1
+    
+    @property
+    def tex_ref(self):
+        """ Use this when passing to imgui.image """
+        return self._id
+
+    @property
+    def id(self):
+        """ Use this when passing to OpenGL related functions """
+        if IMGUI_192:
+            return self._id._tex_id
+        else:
+            return self._id
+
+    @id.setter
+    def id(self, tex_id):
+        if IMGUI_192:
+            self._id._tex_id = tex_id
+        else:
+            self._id = tex_id

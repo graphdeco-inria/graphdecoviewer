@@ -35,7 +35,7 @@ class Image(Widget):
 
     def setup(self):
         """ Create OpenGL texture to be displayed. """
-        if self.mode in LOCAL_CLIENT:
+        if self.mode and LOCAL_CLIENT:
             self.texture.id = glGenTextures(1)
             glBindTexture(GL_TEXTURE_2D, self.texture.id)
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
@@ -46,7 +46,7 @@ class Image(Widget):
     
     def destroy(self):
         """ Delete the texture. """
-        if self.mode in LOCAL_CLIENT:
+        if self.mode and LOCAL_CLIENT:
             glDeleteTextures(1, int(self.texture.id))
 
     def step(self, img):
@@ -80,9 +80,9 @@ class Image(Widget):
 
         if draw_list is not None:
             # Figure out
-            draw_list.add_image(self.texture.id, (0, 0), (res_x, res_y))
+            draw_list.add_image(self.texture.tex_ref, (0, 0), (res_x, res_y))
         else:
-            imgui.image(self.texture.id, (res_x, res_y))
+            imgui.image(self.texture.tex_ref, (res_x, res_y))
 
 class NumpyImage(Image):
     """ Image viewer where the image to be shown comes from NumPy array. """

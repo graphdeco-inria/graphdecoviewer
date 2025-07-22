@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "graphdecoviewer"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     { name="Ishaan Shah", email="ishaan.shah@inria.fr" },
     { name="Andreas Meuleman", email="andreas.meuleman@inria.fr" },
