@@ -35,7 +35,7 @@ class Image(Widget):
 
     def setup(self):
         """ Create OpenGL texture to be displayed. """
-        if self.mode and LOCAL_CLIENT:
+        if self.mode & LOCAL_CLIENT:
             self.texture.id = glGenTextures(1)
             glBindTexture(GL_TEXTURE_2D, self.texture.id)
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
@@ -46,7 +46,7 @@ class Image(Widget):
     
     def destroy(self):
         """ Delete the texture. """
-        if self.mode and LOCAL_CLIENT:
+        if self.mode & LOCAL_CLIENT:
             glDeleteTextures(1, int(self.texture.id))
 
     def step(self, img):
