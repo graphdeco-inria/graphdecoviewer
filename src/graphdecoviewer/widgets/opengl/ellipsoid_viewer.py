@@ -1,10 +1,7 @@
 import numpy as np
-from . import Widget
+from . import OpenGLWidget
 from OpenGL.GL import *
-from .cameras import Camera
-from ..types import Texture2D, CLIENT
-from imgui_bundle import imgui
-from OpenGL.GL.shaders import compileShader, compileProgram
+from ..cameras import Camera
 
 _vert_shader = """
 /*
@@ -221,37 +218,26 @@ void main(void) {
 }
 """
 
-class EllipsoidViewer(Widget):
+class EllipsoidViewer(OpenGLWidget):
     def __init__(self, mode):
-        super().__init__(mode)
+        super().__init__(_vert_shader, _frag_shader, mode)
         self.limit = 0.2
         self.scaling_modifier = 1
         self.render_floaters = False
         self.num_gaussians = None
-        self.step_called = False
         self.enabled = False
 
     def setup(self):
-        """ Create the buffers for storing the gaussian parameters and the framebuffers to render to. """
-        self._color_texture = Texture2D()
-        self._color_texture.id = glGenTextures(1)
-        self._depth_texture = Texture2D() # Technically its a RBO
-        self._depth_texture.id = glGenRenderbuffers(1)
-        self._fbo = None
-
-        # Create buffers for Gaussian Attributes
-        self._means = glGenBuffers(1)
-        self._rotations = glGenBuffers(1)
-        self._scales = glGenBuffers(1)
-        self._alphas = glGenBuffers(1)
-        self._colors = glGenBuffers(1)
-
+        """ Create the buffers for storing the gaussian parameters. """
         try:
-            # Create shaders
-            self._shader = compileProgram(
-                compileShader(_vert_shader, GL_VERTEX_SHADER),
-                compileShader(_frag_shader, GL_FRAGMENT_SHADER),
-            )
+            super().setup()
+
+            # Create buffers for Gaussian Attributes
+            self._means = glGenBuffers(1)
+            self._rotations = glGenBuffers(1)
+            self._scales = glGenBuffers(1)
+            self._alphas = glGenBuffers(1)
+            self._colors = glGenBuffers(1)
 
             self._vao = glGenVertexArrays(1)
             glBindVertexArray(self._vao)
@@ -259,73 +245,19 @@ class EllipsoidViewer(Widget):
             # Create a query for timing
             self.query = glGenQueries(1)[0]
 
-            # Create a dummy FBO because `step` is not called in CLIENT mode
-            if self.mode is CLIENT:
-                self._create_fbo(1, 1)
-
             self.enabled = True
         except Exception as e:
             print(f"Error setting up EllipsoidViewer: {e}")
 
     def destroy(self):
-        glDeleteTextures(1, int(self._color_texture.id))
-        glDeleteRenderbuffers(1, int(self._depth_texture.id))
         glDeleteBuffers(1, int(self._means))
         glDeleteBuffers(1, int(self._rotations))
         glDeleteBuffers(1, int(self._scales))
         glDeleteBuffers(1, int(self._alphas))
         glDeleteBuffers(1, int(self._colors))
         glDeleteQueries(1, int(self.query))
-        if self._fbo is not None:
-            glDeleteFramebuffers(1, int(self._fbo))
-        glDeleteProgram(self._shader)
+        super().destroy()
 
-    def _create_fbo(self, res_x: int, res_y: int):
-        # Create framebuffer
-        if self._fbo is not None:
-            glDeleteFramebuffers(self._fbo)
-        self._fbo = glGenFramebuffers(1)
-        glBindFramebuffer(GL_FRAMEBUFFER, self._fbo)
-
-        # Create texture to render to
-        self._color_texture.res_x = res_x
-        self._color_texture.res_y = res_y
-        glBindTexture(GL_TEXTURE_2D, self._color_texture.id)
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexImage2D(
-            GL_TEXTURE_2D, 0, GL_RGBA8,
-            self._color_texture.res_x, self._color_texture.res_y,
-            0, GL_RGBA, GL_UNSIGNED_BYTE, None
-        )
-        glBindTexture(GL_TEXTURE_2D, 0)
-        # Attach texture to framebuffer
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-            self._color_texture.id, 0
-        )
-
-        # Create depth RBO
-        self._depth_texture.res_x = res_x
-        self._depth_texture.res_y = res_y
-        glBindRenderbuffer(GL_RENDERBUFFER, self._depth_texture.id)
-        glRenderbufferStorage(
-            GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
-            self._depth_texture.res_x, self._depth_texture.res_y
-        )
-        glBindRenderbuffer(GL_RENDERBUFFER, 0)
-        # Attach it framebuffer
-        glFramebufferRenderbuffer(
-            GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
-            self._depth_texture.id
-        )
-
-        # Verify framebuffer is complete
-        assert glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE, "FBO not complete"
-
-        # Unbind the FBO
-        glBindFramebuffer(GL_FRAMEBUFFER, 0)
-    
     def upload(self, means: np.ndarray, rotations: np.ndarray, scales: np.ndarray, alphas: np.ndarray, colors: np.ndarray):
         """ Upload gaussian parameters to OpenGL buffers. """
         self.num_gaussians = means.shape[0]
@@ -399,38 +331,3 @@ class EllipsoidViewer(Widget):
         glEndQuery(GL_TIME_ELAPSED)
 
         self.step_called = True
-
-    def server_send(self):
-        if not self.step_called:
-            return None, None
-        glBindTexture(GL_TEXTURE_2D, self._color_texture.id)
-        arr = glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE)
-        glBindTexture(GL_TEXTURE_2D, 0)
-        self.step_called = False
-        return arr, {"shape": (self._color_texture.res_y, self._color_texture.res_x, 3)}
-    
-    def client_recv(self, binary, text):
-        img = np.frombuffer(binary, dtype=np.uint8).reshape(text["shape"])
-        # import matplotlib.pyplot as plt
-        # plt.imshow(img)
-        # plt.show()
-        # exit()
-        res_y = text["shape"][0]
-        res_x = text["shape"][1]
-        # img = binary
-        glBindTexture(GL_TEXTURE_2D, self._color_texture.id)
-        if self._color_texture.res_x != res_x  or self._color_texture.res_y != res_y:
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, res_x, res_y, 0, GL_RGB, GL_UNSIGNED_BYTE, img)
-            self._color_texture.res_x = res_x
-            self._color_texture.res_y = res_y
-        else:
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, res_x, res_y, GL_RGB, GL_UNSIGNED_BYTE, img)
-        glBindTexture(GL_TEXTURE_2D, 0)
-    
-    def show_gui(self, draw_list: imgui.ImDrawList=None):
-        res_x = self._color_texture.res_x
-        res_y = self._color_texture.res_y
-        if draw_list is not None:
-            draw_list.add_image(self._color_texture.tex_ref, (0, 0), (res_x, res_y))
-        else:
-            imgui.image(self._color_texture.tex_ref, (res_x, res_y))
