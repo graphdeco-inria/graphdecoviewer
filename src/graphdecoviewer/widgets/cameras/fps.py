@@ -3,7 +3,6 @@ import numpy as np
 import logging
 from . import Camera
 from ...types import ViewerMode
-from imgui_bundle import imgui
 
 
 # TODO: Coalesce all camera types into a single class
@@ -124,3 +123,7 @@ class FPSCamera(Camera):
 
         self.origin_motion = np.zeros(3)
         self.rotation_motion = np.zeros(3)
+
+    def import_client_modules(self):
+        global imgui
+        from imgui_bundle import imgui

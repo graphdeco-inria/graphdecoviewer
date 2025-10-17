@@ -18,12 +18,14 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
     "numpy",
-    "imgui-bundle",
     "PyOpenGL",
     "websockets",
     "glfw",
     "cuda-python; sys_platform != 'darwin'"
 ]
+
+[project.optional-dependencies]
+gui = ["imgui-bundle"]
 
 [project.urls]
 Homepage = "https://github.com/graphdeco-inria/graphdecoviewer"

@@ -3,7 +3,6 @@ from .. import Widget
 from ...types import ViewerMode, CLIENT, Texture2D
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileShader, compileProgram
-from imgui_bundle import imgui
 
 class OpenGLWidget(Widget):
     """
@@ -132,3 +131,7 @@ class OpenGLWidget(Widget):
             draw_list.add_image(self._color_texture.tex_ref, (0, 0), (res_x, res_y))
         else:
             imgui.image(self._color_texture.tex_ref, (res_x, res_y))
+
+    def import_client_modules(self):
+        global imgui
+        from imgui_bundle import imgui

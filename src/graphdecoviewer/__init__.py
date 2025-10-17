@@ -10,7 +10,6 @@ from websockets.sync.client import connect, ClientConnection
 from .types import *
 from .widgets import Widget
 from abc import ABC, abstractmethod
-from imgui_bundle import immapp, hello_imgui
 
 class Viewer(ABC):
     """
@@ -38,6 +37,13 @@ class Viewer(ABC):
         # Import server specific modules
         if self.mode & LOCAL_SERVER:
             self.import_server_modules()
+
+        # Import client specific modules
+        self.parent_import_server_modules_called = False
+        if self.mode & LOCAL_CLIENT:
+            self.import_client_modules()
+        assert self.parent_import_server_modules_called, \
+            "Call to `super().import_client_modules()` missing." 
 
     def _setup(self):
         """ Go over all of the widgets and initialize them """
@@ -194,7 +200,9 @@ class Viewer(ABC):
                     websocket = connect(f"ws://{ip}:{port}", max_size=None, compression=None)
                     print("INFO: Connected to server.")
                     self.onconnect(websocket)
-                    self.websocket = websocket  # Make websocket available after onconnect finishes to avoid the main thread from usinng it
+                    # Make websocket available after onconnect finishes to avoid
+                    # the main thread from usinng it
+                    self.websocket = websocket  
                 except Exception as e:
                     print(f"INFO: Failed to connect to server with error: {e}."
                         " Retrying in 2 seconds.")
@@ -368,6 +376,20 @@ class Viewer(ABC):
         `server*` methods. Don't forget to declare the variables as `global` to 
         ensure that they are globally accesible.
         """
+    
+    def import_client_modules(self):
+        """
+        Import client specific modules here. We want the viewer to run without 
+        needing to install `imgui_bundle` on the server. The modules imported
+        here can only be used in `show_gui` and `client*` methods. Don't forget
+        to declare the variables as `global` to  ensure that they are globally
+        accesible.
+        """
+        global immapp
+        global hello_imgui
+        from imgui_bundle import immapp, hello_imgui
+
+        self.parent_import_server_modules_called = True
 
     @abstractmethod
     def show_gui(self) -> bool:

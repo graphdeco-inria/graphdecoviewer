@@ -1,6 +1,5 @@
 import numpy as np
 from .. import Widget
-from imgui_bundle import imgui
 from ...types import ViewerMode, Texture2D
 
 # Coordinate system is same as OpenCV
@@ -187,3 +186,7 @@ class Camera(Widget):
         self.up = self.up / np.linalg.norm(self.up)
         self.right = mat[:3, 0]
         self.right = self.right / np.linalg.norm(self.right)
+
+    def import_client_modules(self):
+        global imgui
+        from imgui_bundle import imgui

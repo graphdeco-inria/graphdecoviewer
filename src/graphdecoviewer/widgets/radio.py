@@ -1,7 +1,6 @@
 import string
 import random
 from enum import Enum
-from imgui_bundle import imgui
 from ..widgets import Widget
 from ..types import ViewerMode
 
@@ -32,3 +31,7 @@ class RadioPicker(Widget):
     
     def server_recv(self, _, text):
         self.value = type(self.value)(text["value"])
+
+    def import_client_modules(self):
+        global imgui
+        from imgui_bundle import imgui

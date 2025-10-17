@@ -1,8 +1,12 @@
 from OpenGL import *
 from enum import IntFlag, auto
-from imgui_bundle import imgui, __version__ as imgui_version
 
-IMGUI_192 = tuple(map(int, imgui_version.split("."))) >= (1,92,0)
+try:
+    from imgui_bundle import imgui, __version__ as imgui_version
+    IMGUI_192 = tuple(map(int, imgui_version.split("."))) >= (1,92,0)
+except ImportError:
+    # Running on server without `imgui_bundle` installed
+    IMGUI_192 = False
 
 class ViewerMode(IntFlag):
     LOCAL = auto()

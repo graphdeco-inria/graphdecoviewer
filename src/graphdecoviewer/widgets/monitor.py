@@ -2,7 +2,6 @@ import numpy as np
 from . import Widget
 from ..types import ViewerMode
 from typing import List
-from imgui_bundle import implot, imgui
 
 class PerformanceMonitor(Widget):
     # TODO: Support single field
@@ -75,3 +74,8 @@ class PerformanceMonitor(Widget):
         self.offset = text["offset"]
         for field, times in self.times.items():
             times[self.offset] = text["times"][field]
+
+    def import_client_modules(self):
+        global imgui
+        global implot
+        from imgui_bundle import implot, imgui

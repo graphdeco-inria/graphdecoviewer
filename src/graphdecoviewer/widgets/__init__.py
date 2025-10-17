@@ -1,5 +1,5 @@
 from typing import Optional
-from ..types import ViewerMode
+from ..types import ViewerMode, LOCAL_CLIENT
 from abc import ABC, abstractmethod
 
 class Widget(ABC):
@@ -9,6 +9,9 @@ class Widget(ABC):
         self.mode = mode
         self.widget_id = Widget.id
         Widget.id += 1
+
+        if mode & LOCAL_CLIENT:
+            self.import_client_modules()
 
     def setup(self):
         """
@@ -59,7 +62,16 @@ class Widget(ABC):
             binary (bytes): Any binary data to be received from the server.
             text (dict): Any text data to be received from the server.
         """
-    
+
+    def import_client_modules(self):
+        """
+        Import client specific modules here. We want the viewer to run without 
+        needing to install `imgui_bundle` on the server. The modules imported
+        here can only be used in `show_gui` and `client*` methods. Don't forget
+        to declare the variables as `global` to  ensure that they are globally
+        accesible.
+        """
+
     @abstractmethod
     def show_gui(self):
         pass

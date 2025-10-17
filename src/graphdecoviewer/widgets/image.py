@@ -1,7 +1,6 @@
 import numpy as np
 from . import Widget
 from OpenGL.GL import *
-from imgui_bundle import imgui
 from abc import abstractmethod
 from ..types import *
 
@@ -83,6 +82,10 @@ class Image(Widget):
             draw_list.add_image(self.texture.tex_ref, (0, 0), (res_x, res_y))
         else:
             imgui.image(self.texture.tex_ref, (res_x, res_y))
+
+    def import_client_modules(self):
+        global imgui
+        from imgui_bundle import imgui
 
 class NumpyImage(Image):
     """ Image viewer where the image to be shown comes from NumPy array. """
