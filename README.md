@@ -4,8 +4,17 @@ GraphDeco Viewer is a modern, Python-based 3D visualization tool designed as a r
 **NOTE**: The current release is in *alpha* mode, and there may be breaking changes in future updates as the project evolves.
 
 ## Installation
-The package can be installed using PIP as follows:
+The package is available in two versions: **GUI** and **Non-GUI**.
+The only difference is that the GUI version requires `imgui-bundle`.
+If your system lacks the dependencies to build `imgui-bundle`, you can still use the viewer in `SERVER` mode (no GUI needed) and visualize the results locally with the **GUI** version.
+
+### GUI Version
+```bash
+pip install git+https://github.com/graphdeco-inria/graphdecoviewer[gui]
 ```
+
+### Non GUI Version
+```bash
 pip install git+https://github.com/graphdeco-inria/graphdecoviewer
 ```
 
@@ -30,7 +39,8 @@ The viewer can run in three different modes:
 To create a new viewer, you must inherit from the `Viewer` class and override the following function:
 - `__init__`: If you override this function, you must necessarily call the `__init__` of the parent class using `super().__init__(mode)` to ensure the state variables and appropriate modules are imported.
 - `create_widgets`: Overide this function to define widgets required by the viewer along with any additional state variables.
-- `import_server_modules`: Import any modules required only on the server here. This typically would involve packages such as `torch` and other local code dependancies which might not be available in the client environment. You should assume the modules imported here are only available in `server_(send|recv)` and `step` functions.
+- `import_server_modules`: Import any modules required only on the server here. This typically would involve packages such as `torch` and other local code dependancies which might not be available in the client environment. The modules imported here are only available in `server_(send|recv)` and `step` functions.
+- `import_client_modules`: Import any modules required only on the client here. This typically would be `imgui_bundle` since it might not be available in the server environment. The modules imported here are only available in `client_(send|recv)` and `client` functions.
 - `step`: Define any computation in this function. This function will only be called on the server in network mode
 - `show_gui`: Define the GUI in this function. This function will only be called on the client in network mode.
 - `(client|server)_send`: Override this function to send any data from the client or server. The function should return a tuple with the first element being any binary data, and the second being a dictionary containing any text metadata. Either elements can be `None` if the viewer doesn't need to send that type of data. The default implementation returns `(None,None)`.
@@ -43,8 +53,9 @@ To create a new widget, you must inherit from the `Widget` class and override th
 - `destroy`: This function will be called when the application exits. Override this function to deallocate any OpenGL objects or anything else which doesn't support automatic garbage collection.
 - `step`: Same as `Viewer.step`.
 - `show_gui`: Same as `Viewer.show_gui`.
-- `(client|server)_send`: Same as `Viewer.(client|server)_send`
-- `(client|server)_recv`: Same as `Viewer.(client|server)_recv`
+- `import_client_module`: Same as `Viewer.import_client_module`.
+- `(client|server)_send`: Same as `Viewer.(client|server)_send`.
+- `(client|server)_recv`: Same as `Viewer.(client|server)_recv`.
 
 ## Widgets
 Following is the list of widgets which are available/planned to be included in the viewer by default.
@@ -59,3 +70,13 @@ Following is the list of widgets which are available/planned to be included in t
 |EllipseViewer|||A widget to visualize 2D gaussians as Ellipses||
 |PixelInspector|||A widget which allows to zoom onto a texture and inspect pixels||
 |ImageCompare|||A image slider to compare two images side by side||
+
+## Release Notes
+### v0.1.2 (WIP)
+- [x] (BREAKING) Make `imgui-bundle` optional.
+
+  `imgui-bundle` is no longer installed by default. All imports from `imgui-bundle` must happen in `import_client_module` and they can only be used in `show_gui` and `client_(send|recv)`. This allows installation of the package on systems which don't have packages to build `imgui-bundle` from scratch.
+
+- [x] Fix bug causing issue in remote mode.
+- [ ] Add `PointRenderer`.
+- [ ] Add `ImageCompare`
