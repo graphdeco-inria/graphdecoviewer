@@ -125,5 +125,7 @@ class FPSCamera(Camera):
         self.rotation_motion = np.zeros(3)
 
     def import_client_modules(self):
+        super().import_client_modules()
+
         global imgui
         from imgui_bundle import imgui

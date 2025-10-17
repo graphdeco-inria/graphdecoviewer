@@ -42,8 +42,8 @@ class Viewer(ABC):
         self.parent_import_server_modules_called = False
         if self.mode & LOCAL_CLIENT:
             self.import_client_modules()
-        assert self.parent_import_server_modules_called, \
-            "Call to `super().import_client_modules()` missing." 
+            assert self.parent_import_server_modules_called, \
+                "Call to `super().import_client_modules()` missing." 
 
     def _setup(self):
         """ Go over all of the widgets and initialize them """

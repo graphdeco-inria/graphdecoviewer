@@ -65,7 +65,7 @@ class Image(Widget):
         this method to define the upload procedure based upon the source.
         """
 
-    def show_gui(self, draw_list: imgui.ImDrawList=None, res_x=0, res_y=0):
+    def show_gui(self, draw_list: 'imgui.ImDrawList'=None, res_x=0, res_y=0):
         if self.img is None:
             return
 

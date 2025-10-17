@@ -123,7 +123,7 @@ class OpenGLWidget(Widget):
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, res_x, res_y, GL_RGB, GL_UNSIGNED_BYTE, img)
         glBindTexture(GL_TEXTURE_2D, 0)
     
-    def show_gui(self, draw_list: imgui.ImDrawList=None):
+    def show_gui(self, draw_list: 'imgui.ImDrawList'=None):
         res_x = self._color_texture.res_x
         res_y = self._color_texture.res_y
         if draw_list is not None:
