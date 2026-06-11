@@ -16,8 +16,13 @@ class FPSCamera(Camera):
         z_near: float = 0.001,
         z_far: float = 100.0,
         to_world: np.ndarray = None,
+        principal_point_offset_x: float = 0.0,
+        principal_point_offset_y: float = 0.0,
     ):
-        super().__init__(mode, res_x, res_y, fov_y, z_near, z_far, to_world)
+        super().__init__(
+            mode, res_x, res_y, fov_y, z_near, z_far, to_world,
+            principal_point_offset_x, principal_point_offset_y,
+        )
         self.smoothness = 0.4
         self.origin_motion = np.zeros(3)
         self.rotation_motion = np.zeros(3)

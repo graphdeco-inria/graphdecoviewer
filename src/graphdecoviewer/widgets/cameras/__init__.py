@@ -11,7 +11,9 @@ class Camera(Widget):
             self, mode: ViewerMode,
             res_x: int=1280, res_y: int=720, fov_y: float=30.0,
             z_near: float=0.001, z_far: float=100.0,
-            to_world: np.ndarray=None
+            to_world: np.ndarray=None,
+            principal_point_offset_x: float=0.0,
+            principal_point_offset_y: float=0.0,
         ):
         super().__init__(mode)
 
@@ -35,6 +37,12 @@ class Camera(Widget):
         self.z_near = z_near
         self.z_far = z_far
 
+        # Principal point offset, in normalized units (fraction of the image
+        # half-extent), following Mitsuba's convention: it shifts the projected
+        # point by 2 * offset in NDC. (0, 0) keeps the principal point centered.
+        self.principal_point_offset_x = principal_point_offset_x
+        self.principal_point_offset_y = principal_point_offset_y
+
     def server_recv(self, _, text):
         self.res_x = text["res_x"]
         self.res_y = text["res_y"]
@@ -42,6 +50,8 @@ class Camera(Widget):
         self.fov_y = text["fov_y"]
         self.z_near = text["z_near"]
         self.z_far = text["z_far"]
+        self.principal_point_offset_x = text.get("principal_point_offset_x", 0.0)
+        self.principal_point_offset_y = text.get("principal_point_offset_y", 0.0)
         self.update_pose(np.array(text["to_world"]))
 
     def client_send(self):
@@ -61,6 +71,8 @@ class Camera(Widget):
             "fov_y": self.fov_y,
             "z_near": self.z_near,
             "z_far": self.z_far,
+            "principal_point_offset_x": self.principal_point_offset_x,
+            "principal_point_offset_y": self.principal_point_offset_y,
             "to_world": self.to_world.tolist()
         }
 
@@ -101,8 +113,10 @@ class Camera(Widget):
 
         P[0, 0] = 2.0 * self.z_near / (right - left)
         P[1, 1] = 2.0 * self.z_near / (top - bottom)
-        P[0, 2] = (right + left) / (right - left)
-        P[1, 2] = (top + bottom) / (top - bottom)
+        # Base (centered) principal point, shifted by the principal point offset.
+        # A positive offset moves the projected point by -2 * offset in NDC.
+        P[0, 2] = (right + left) / (right - left) - 2.0 * self.principal_point_offset_x
+        P[1, 2] = (top + bottom) / (top - bottom) - 2.0 * self.principal_point_offset_y
         P[3, 2] = z_sign
         P[2, 2] = z_sign * self.z_far / (self.z_far - self.z_near)
         P[2, 3] = -(self.z_far * self.z_near) / (self.z_far - self.z_near)
