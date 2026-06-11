@@ -123,14 +123,29 @@ class OpenGLWidget(Widget):
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, res_x, res_y, GL_RGB, GL_UNSIGNED_BYTE, img)
         glBindTexture(GL_TEXTURE_2D, 0)
     
-    def show_gui(self, draw_list: 'imgui.ImDrawList'=None):
+    def show_gui(self, draw_list: 'imgui.ImDrawList'=None,
+                 pos: tuple=(0.0, 0.0), size: tuple=None, opacity: float=1.0):
+        """
+        Display the rendered color texture. With a `draw_list` the texture is
+        drawn at `pos` spanning `size` (defaulting to the render resolution);
+        otherwise it is added as an inline `imgui.image` item. `opacity` scales
+        the overall alpha, useful when compositing on top of other content.
+        """
         res_x = self._color_texture.res_x
         res_y = self._color_texture.res_y
+        if res_x <= 0 or res_y <= 0:
+            return
+        if size is None:
+            size = (res_x, res_y)
         if draw_list is not None:
-            # Figure out
-            draw_list.add_image(self._color_texture.tex_ref, (0, 0), (res_x, res_y))
+            p_min = (pos[0], pos[1])
+            p_max = (pos[0] + size[0], pos[1] + size[1])
+            col = imgui.get_color_u32((1.0, 1.0, 1.0, opacity))
+            draw_list.add_image(
+                self._color_texture.tex_ref, p_min, p_max, (0.0, 0.0), (1.0, 1.0), col
+            )
         else:
-            imgui.image(self._color_texture.tex_ref, (res_x, res_y))
+            imgui.image(self._color_texture.tex_ref, size)
 
     def import_client_modules(self):
         global imgui
