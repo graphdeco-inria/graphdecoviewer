@@ -47,7 +47,7 @@ class OpenGLWidget(Widget):
     def _create_fbo(self, res_x: int, res_y: int):
         # Create framebuffer
         if self._fbo is not None:
-            glDeleteFramebuffers(self._fbo)
+            glDeleteFramebuffers(1, int(self._fbo))
         self._fbo = glGenFramebuffers(1)
         glBindFramebuffer(GL_FRAMEBUFFER, self._fbo)
 

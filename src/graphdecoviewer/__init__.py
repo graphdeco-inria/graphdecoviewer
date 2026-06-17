@@ -9,6 +9,7 @@ from websockets.sync.server import serve, ServerConnection
 from websockets.sync.client import connect, ClientConnection
 from .types import *
 from .widgets import Widget
+from .gl_context import create_headless_context
 from abc import ABC, abstractmethod
 
 class Viewer(ABC):
@@ -101,7 +102,7 @@ class Viewer(ABC):
             return
         self.num_connections += 1
 
-        glfw.make_context_current(self.window)
+        self._gl.make_current()
         self.onconnect(websocket)
 
         # Main Loop
@@ -115,7 +116,7 @@ class Viewer(ABC):
             print(f"ERROR: Connection closed with error: {e}")
             self.num_connections -= 1
 
-        glfw.make_context_current(None)
+        self._gl.release()
 
     def _server_send(self, websocket: ServerConnection):
         """
@@ -314,24 +315,20 @@ class Viewer(ABC):
             self._runner_params.imgui_window_params.default_imgui_window_type = hello_imgui.DefaultImGuiWindowType.provide_full_screen_dock_space
             immapp.run(self._runner_params, self._addon_params)
         if self.mode is SERVER:
-            # Initialize OpenGL and setup widgets
-            glfw.init()
-            glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
-            # Request an OpenGL 3.3 core profile so the headless server context
-            # matches the one the LOCAL/CLIENT GUI gets from imgui_bundle. Without
-            # this, the default (compatibility) context leaves point sprites off,
-            # so `gl_PointCoord` reads (0,0) in fragment shaders and widgets that
-            # rely on it (e.g. PointRenderer's disc test) discard every fragment.
-            glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
-            glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
-            glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-            glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
-            self.window = glfw.create_window(1920, 1080, "", None, None)
-            glfw.make_context_current(self.window)
+            # SERVER renders the widgets' offscreen framebuffers and streams them,
+            # so it needs a current OpenGL context but no visible window. Prefer
+            # GLFW (the GUI's backend) and fall back to a windowless EGL context on
+            # headless hosts with no display. Both request an OpenGL 3.3 core
+            # profile (see gl_context.py): a compatibility context leaves point
+            # sprites off, so `gl_PointCoord` reads (0,0) in fragment shaders and
+            # widgets that rely on it (e.g. PointRenderer's disc test) discard every
+            # fragment.
+            self._gl = create_headless_context()
+            self._gl.make_current()
             self._setup()
 
-            # Release window so that the server thread can use it
-            glfw.make_context_current(None)
+            # Release the context so the server thread can make it current.
+            self._gl.release()
 
             # Start server
             with serve(self._server_loop, ip, port, max_size=None, compression=None) as server:
@@ -345,10 +342,11 @@ class Viewer(ABC):
                         server.shutdown()
                         server_thread.join()
                         break
-            
-            # Reacquire GLFW context and free resources
-            glfw.make_context_current(self.window)
+
+            # Reacquire the context and free resources
+            self._gl.make_current()
             self._destroy()
+            self._gl.destroy()
 
         self.running = False
 
