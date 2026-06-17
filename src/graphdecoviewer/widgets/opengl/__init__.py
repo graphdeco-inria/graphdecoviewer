@@ -104,11 +104,15 @@ class OpenGLWidget(Widget):
     def server_send(self):
         if not self.step_called:
             return None, None
+        # Stream RGBA (not RGB) so the alpha channel survives. Widgets like the
+        # point overlay render onto a transparent background and are composited
+        # on the client, which needs that alpha to let the underlying image show
+        # through; dropping it would make the background opaque black.
         glBindTexture(GL_TEXTURE_2D, self._color_texture.id)
-        arr = glGetTexImage(GL_TEXTURE_2D, 0, GL_RGB, GL_UNSIGNED_BYTE)
+        arr = glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE)
         glBindTexture(GL_TEXTURE_2D, 0)
         self.step_called = False
-        return arr, {"shape": (self._color_texture.res_y, self._color_texture.res_x, 3)}
+        return arr, {"shape": (self._color_texture.res_y, self._color_texture.res_x, 4)}
 
     def client_recv(self, binary, text):
         img = np.frombuffer(binary, dtype=np.uint8).reshape(text["shape"])
@@ -116,11 +120,11 @@ class OpenGLWidget(Widget):
         res_x = text["shape"][1]
         glBindTexture(GL_TEXTURE_2D, self._color_texture.id)
         if self._color_texture.res_x != res_x  or self._color_texture.res_y != res_y:
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, res_x, res_y, 0, GL_RGB, GL_UNSIGNED_BYTE, img)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, res_x, res_y, 0, GL_RGBA, GL_UNSIGNED_BYTE, img)
             self._color_texture.res_x = res_x
             self._color_texture.res_y = res_y
         else:
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, res_x, res_y, GL_RGB, GL_UNSIGNED_BYTE, img)
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, res_x, res_y, GL_RGBA, GL_UNSIGNED_BYTE, img)
         glBindTexture(GL_TEXTURE_2D, 0)
     
     def show_gui(self, draw_list: 'imgui.ImDrawList'=None,

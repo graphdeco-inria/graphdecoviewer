@@ -317,6 +317,15 @@ class Viewer(ABC):
             # Initialize OpenGL and setup widgets
             glfw.init()
             glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
+            # Request an OpenGL 3.3 core profile so the headless server context
+            # matches the one the LOCAL/CLIENT GUI gets from imgui_bundle. Without
+            # this, the default (compatibility) context leaves point sprites off,
+            # so `gl_PointCoord` reads (0,0) in fragment shaders and widgets that
+            # rely on it (e.g. PointRenderer's disc test) discard every fragment.
+            glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
+            glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
+            glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+            glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
             self.window = glfw.create_window(1920, 1080, "", None, None)
             glfw.make_context_current(self.window)
             self._setup()
