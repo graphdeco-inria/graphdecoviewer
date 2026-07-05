@@ -35,7 +35,7 @@ class Image(Widget):
 
     def setup(self):
         """ Create OpenGL texture to be displayed. """
-        if self.mode and LOCAL_CLIENT:
+        if self.mode in LOCAL_CLIENT:
             self.texture.id = glGenTextures(1)
             glBindTexture(GL_TEXTURE_2D, self.texture.id)
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
@@ -46,7 +46,7 @@ class Image(Widget):
     
     def destroy(self):
         """ Delete the texture. """
-        if self.mode and LOCAL_CLIENT:
+        if self.mode in LOCAL_CLIENT:
             glDeleteTextures(1, int(self.texture.id))
 
     def step(self, img):
@@ -121,6 +121,9 @@ except ImportError:
 
 try:
     import torch
+    # CUDA-OpenGL interop is not implemented with HIP
+    if hasattr(torch.version, 'hip') and torch.version.hip is not None:
+        enable_torch_image = False
 except ImportError:
     print("WARNING: 'torch' not found. Stubbing 'TorchImage' with 'NumpyImage'.")
     enable_torch_image = False
@@ -194,3 +197,4 @@ else:
                 img = img.detach().cpu().numpy()
             # Otherwise it's already a numpy array
             self.img = img
+            self.step_called = True

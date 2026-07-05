@@ -36,7 +36,7 @@ class Viewer(ABC):
         self.mode = mode
 
         # Import server specific modules
-        if self.mode and LOCAL_SERVER:
+        if self.mode in LOCAL_SERVER:
             self.import_server_modules()
 
     def _setup(self):
@@ -69,7 +69,7 @@ class Viewer(ABC):
         if self.mode is SERVER:
             self._server_recv(websocket)
 
-        if self.mode and LOCAL_SERVER:
+        if self.mode in LOCAL_SERVER:
             self.step()
 
         if self.mode is SERVER:
@@ -83,7 +83,7 @@ class Viewer(ABC):
                 self.websocket.close()
                 self.websocket = None
 
-        if self.mode and LOCAL_CLIENT:
+        if self.mode in LOCAL_CLIENT:
             self.show_gui()
     
     def _server_loop(self, websocket: ServerConnection):
@@ -95,21 +95,21 @@ class Viewer(ABC):
             return
         self.num_connections += 1
 
-        glfw.make_context_current(self.window)
-        self.onconnect(websocket)
-
-        # Main Loop
+        # Main Loop. Run onconnect inside the try so a disconnect during the
+        # initial handshake can't leak the connection slot, and release the
+        # slot in 'finally' so any exit path frees it (otherwise the server
+        # permanently rejects new clients with "Client already connected").
         try:
+            self.onconnect(websocket)
             while True:
                 self._main(websocket)
         except ConnectionClosedOK:
             print("INFO: Client disconnected.")
-            self.num_connections -= 1
         except ConnectionClosedError as e:
             print(f"ERROR: Connection closed with error: {e}")
+        finally:
             self.num_connections -= 1
 
-        glfw.make_context_current(None)
 
     def _server_send(self, websocket: ServerConnection):
         """
@@ -197,9 +197,9 @@ class Viewer(ABC):
                     self.websocket = websocket  # Make websocket available after onconnect finishes to avoid the main thread from usinng it
                 except Exception as e:
                     print(f"INFO: Failed to connect to server with error: {e}."
-                        " Retrying in 2 seconds.")
+                        " Retrying in 0.5 seconds.")
                     self.websocket = None
-            time.sleep(2)
+            time.sleep(0.5)
 
     def _client_send(self, websocket: ClientConnection):
         """
@@ -285,7 +285,7 @@ class Viewer(ABC):
             # Make the thread a daemon so that it exits when the main thread exits.
             connect_thread.daemon = True
             connect_thread.start()
-        if self.mode and LOCAL_CLIENT:
+        if self.mode in LOCAL_CLIENT:
             self._runner_params = hello_imgui.RunnerParams()
             self._runner_params.fps_idling.enable_idling = False
             self._runner_params.app_window_params.window_geometry.window_size_state = hello_imgui.WindowSizeState.maximized
@@ -307,17 +307,14 @@ class Viewer(ABC):
             immapp.run(self._runner_params, self._addon_params)
         if self.mode is SERVER:
             # Initialize OpenGL and setup widgets
-            glfw.init()
-            glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
-            self.window = glfw.create_window(1920, 1080, "", None, None)
-            glfw.make_context_current(self.window)
             self._setup()
 
             # Release window so that the server thread can use it
             glfw.make_context_current(None)
 
             # Start server
-            with serve(self._server_loop, ip, port, max_size=None, compression=None) as server:
+            with serve(self._server_loop, ip, port, max_size=None, compression=None,
+                       ping_interval=5.0, ping_timeout=10.0) as server:
                 server_thread = threading.Thread(target=server.serve_forever)
                 server_thread.start()
                 while True:
@@ -330,7 +327,6 @@ class Viewer(ABC):
                         break
             
             # Reacquire GLFW context and free resources
-            glfw.make_context_current(self.window)
             self._destroy()
 
         self.running = False
