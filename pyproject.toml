@@ -21,6 +21,7 @@ dependencies = [
     "PyOpenGL",
     "websockets",
     "glfw",
+    "Pillow",
     "cuda-python; sys_platform != 'darwin'"
 ]
 

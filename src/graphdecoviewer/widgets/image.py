@@ -1,8 +1,47 @@
+import io
 import numpy as np
+from typing import Optional
+from PIL import Image as _PILImage
 from . import Widget
 from OpenGL.GL import *
 from abc import abstractmethod
 from ..types import *
+
+# PIL image modes for encode/decode, keyed by channel count. JPEG has no
+# alpha channel, so 4-channel images can only use "png".
+_PIL_MODE_BY_CHANNELS = {1: "L", 3: "RGB", 4: "RGBA"}
+
+
+def _encode_image(img: np.ndarray, compression: str, quality: int) -> bytes:
+    """Compress an (H, W, C) or (H, W) uint8 array to `compression`-format bytes."""
+    if img.ndim == 2:
+        img = img[..., None]
+    channels = img.shape[-1]
+    mode = _PIL_MODE_BY_CHANNELS.get(channels)
+    if mode is None:
+        raise ValueError(f"Can't compress an image with {channels} channels.")
+    if compression == "jpeg" and mode == "RGBA":
+        raise ValueError("JPEG doesn't support an alpha channel; use compression='png'.")
+    arr = np.ascontiguousarray(img)
+    if channels == 1:
+        arr = arr[..., 0]
+    pil_img = _PILImage.fromarray(arr, mode=mode)
+    buf = io.BytesIO()
+    if compression == "jpeg":
+        pil_img.save(buf, format="JPEG", quality=quality)
+    elif compression == "png":
+        pil_img.save(buf, format="PNG")
+    else:
+        raise ValueError(f"Unknown compression format: {compression!r} (expected 'jpeg' or 'png')")
+    return buf.getvalue()
+
+
+def _decode_image(binary: bytes) -> np.ndarray:
+    """Decompress bytes produced by `_encode_image` back to an (H, W, C) uint8 array."""
+    pil_img = _PILImage.open(io.BytesIO(binary))
+    arr = np.asarray(pil_img)
+    return arr[..., None] if arr.ndim == 2 else arr
+
 
 def _cudaGetErrorEnum(error):
     if isinstance(error, driver.CUresult):
@@ -26,7 +65,18 @@ class Image(Widget):
     Base class for the image viewer widget. Each child class must override
     the '_upload' method to upload their image to the OpenGL texture.
     """
-    def __init__(self, mode: ViewerMode):
+    def __init__(self, mode: ViewerMode, compression: Optional[str] = None, quality: int = 85):
+        """
+        `compression`: None (default) streams raw uint8 bytes over `server_send`/
+        `client_recv` -- exact fidelity, but bandwidth-hungry (e.g. 1280x720 RGB
+        is ~2.7 MB *per frame*). Set to "jpeg" (lossy, smaller, needs 3-channel
+        RGB) or "png" (lossless, supports 1/3/4 channels) to compress each frame
+        before sending -- worth it whenever the link's bandwidth, not render
+        time, is the bottleneck (e.g. a slow or SSH-tunneled remote connection).
+        `quality` (0-100) only applies to "jpeg".
+        """
+        self._compression = compression
+        self._quality = quality
         self.texture = Texture2D()
         self.img = None
         self.step_called = False
@@ -107,10 +157,16 @@ class NumpyImage(Image):
         if img.dtype != np.uint8:
             img = (np.clip(img, 0, 1) * 255).astype(np.uint8)
         self.step_called = False
-        return memoryview(np.ascontiguousarray(img.flatten())), {"shape": tuple(img.shape)}
-    
+        if self._compression is not None:
+            binary = _encode_image(img, self._compression, self._quality)
+            return binary, {"format": self._compression}
+        return memoryview(np.ascontiguousarray(img.flatten())), {"shape": tuple(img.shape), "format": "raw"}
+
     def client_recv(self, binary, text):
-        self.img = np.frombuffer(binary, dtype=np.uint8).reshape(text["shape"])
+        if text.get("format", "raw") == "raw":
+            self.img = np.frombuffer(binary, dtype=np.uint8).reshape(text["shape"])
+        else:
+            self.img = _decode_image(binary)
 
 
 # Check if 'cuda-python' and 'torch' are available
@@ -182,10 +238,16 @@ if enable_torch_image:
             if img.dtype != torch.uint8:
                 img = (torch.clip(img, 0, 1) * 255).byte()
             self.step_called = False
-            return memoryview(img.contiguous().flatten().cpu().numpy()), {"shape": tuple(img.shape)}
+            if self._compression is not None:
+                binary = _encode_image(img.contiguous().cpu().numpy(), self._compression, self._quality)
+                return binary, {"format": self._compression}
+            return memoryview(img.contiguous().flatten().cpu().numpy()), {"shape": tuple(img.shape), "format": "raw"}
 
         def client_recv(self, binary, text):
-            img = np.frombuffer(binary, dtype=np.uint8).reshape(text["shape"])
+            if text.get("format", "raw") == "raw":
+                img = np.frombuffer(binary, dtype=np.uint8).reshape(text["shape"])
+            else:
+                img = _decode_image(binary)
             self.img = torch.from_numpy(img).to(0)
 
 else:
