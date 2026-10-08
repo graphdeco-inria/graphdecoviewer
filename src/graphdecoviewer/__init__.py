@@ -241,6 +241,7 @@ class Viewer(ABC):
         from .web import BrowserWebSocket
         while True:
             if self.websocket is None:
+                websocket = None
                 try:
                     websocket = BrowserWebSocket(f"ws://{ip}:{port}")
                     await websocket.wait_open()
@@ -248,6 +249,10 @@ class Viewer(ABC):
                 except Exception as e:
                     print(f"INFO: Failed to connect to server with error: {e}."
                         " Retrying in 2 seconds.")
+                    # Unlike a native socket, an unused one holds FFI proxies
+                    # that only `close` releases; a retry makes new ones.
+                    if websocket is not None:
+                        websocket.close()
                     self.websocket = None
             await asyncio.sleep(2)
 

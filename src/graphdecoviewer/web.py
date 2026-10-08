@@ -33,9 +33,15 @@ class BrowserWebSocket:
         # The proxies must outlive the socket: JS holds only weak handles.
         self._proxies = [create_proxy(f) for f in
                          (self._on_open, self._on_message, self._on_close, self._on_error)]
-        self._ws = WebSocket.new(url)
-        self._ws.binaryType = "arraybuffer"
-        self._ws.onopen, self._ws.onmessage, self._ws.onclose, self._ws.onerror = self._proxies
+        try:
+            self._ws = WebSocket.new(url)
+            self._ws.binaryType = "arraybuffer"
+            self._ws.onopen, self._ws.onmessage, self._ws.onclose, self._ws.onerror = self._proxies
+        except Exception:
+            # A rejected URL would otherwise strand the proxies: nothing holds
+            # the half-built socket, and only `destroy` frees them.
+            self._destroy_proxies()
+            raise
 
     async def wait_open(self):
         """Resolve once the socket is open; raise if it fails to connect."""
@@ -80,6 +86,9 @@ class BrowserWebSocket:
     def close(self):
         self._closed = True
         self._ws.close()
+        self._destroy_proxies()
+
+    def _destroy_proxies(self):
         for proxy in self._proxies:
             proxy.destroy()
         self._proxies = []
