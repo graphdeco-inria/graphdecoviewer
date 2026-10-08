@@ -1,6 +1,10 @@
 import numpy as np
 from . import OpenGLWidget
-from OpenGL.GL import *
+from ...types import CLIENT
+try:
+    from OpenGL.GL import *
+except ImportError:   # browser: thin client, nothing below `setup` runs
+    pass
 from ..cameras import Camera
 
 _vert_shader = """
@@ -231,6 +235,8 @@ class EllipsoidViewer(OpenGLWidget):
         """ Create the buffers for storing the gaussian parameters. """
         try:
             super().setup()
+            if self.mode is CLIENT:
+                return
 
             # Create buffers for Gaussian Attributes
             self._means = glGenBuffers(1)
@@ -250,6 +256,9 @@ class EllipsoidViewer(OpenGLWidget):
             print(f"Error setting up EllipsoidViewer: {e}")
 
     def destroy(self):
+        if self.mode is CLIENT:
+            super().destroy()
+            return
         glDeleteBuffers(1, int(self._means))
         glDeleteBuffers(1, int(self._rotations))
         glDeleteBuffers(1, int(self._scales))

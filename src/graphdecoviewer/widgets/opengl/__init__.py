@@ -1,8 +1,11 @@
 import numpy as np
 from .. import Widget
-from ...types import ViewerMode, CLIENT, Texture2D
-from OpenGL.GL import *
-from OpenGL.GL.shaders import compileShader, compileProgram
+from ...types import ViewerMode, CLIENT, Texture2D, HAS_GL
+try:
+    from OpenGL.GL import *
+    from OpenGL.GL.shaders import compileShader, compileProgram
+except ImportError:   # browser: a thin client only displays (see `setup`)
+    pass
 
 class OpenGLWidget(Widget):
     """
@@ -28,6 +31,19 @@ class OpenGLWidget(Widget):
         each subsequent resolution update.
         """
         self._color_texture = Texture2D()
+        self._fbo = None # FBO should be created in first call to step
+
+        # A thin client only displays what the server rendered: it owns the
+        # display texture and nothing else (`step` is never called on it).
+        if self.mode is CLIENT:
+            if HAS_GL:
+                self._color_texture.id = glGenTextures(1)
+                glBindTexture(GL_TEXTURE_2D, self._color_texture.id)
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+                glBindTexture(GL_TEXTURE_2D, 0)
+            return
+
         self._color_texture.id = glGenTextures(1)
         self._depth_texture = Texture2D() # Technically its a RBO
         self._depth_texture.id = glGenRenderbuffers(1)
@@ -37,12 +53,6 @@ class OpenGLWidget(Widget):
             compileShader(self._vert_shader, GL_VERTEX_SHADER),
             compileShader(self._frag_shader, GL_FRAGMENT_SHADER)
         )
-
-        self._fbo = None # FBO should be created in first call to step
-
-        # Create a dummy FBO because `step` is not called in CLIENT mode
-        if self.mode is CLIENT:
-            self._create_fbo(1, 1)
 
     def _create_fbo(self, res_x: int, res_y: int):
         # Create framebuffer
@@ -95,6 +105,10 @@ class OpenGLWidget(Widget):
         Deletes the textures, RBOs and shaders. Make sure to call this method from the child
         class after deleting any other OpenGL objects created by it.
         """
+        if self.mode is CLIENT:
+            if HAS_GL:
+                glDeleteTextures(1, int(self._color_texture.id))
+            return
         glDeleteTextures(1, int(self._color_texture.id))
         glDeleteRenderbuffers(1, int(self._depth_texture.id))
         if self._fbo is not None:
@@ -116,16 +130,7 @@ class OpenGLWidget(Widget):
 
     def client_recv(self, binary, text):
         img = np.frombuffer(binary, dtype=np.uint8).reshape(text["shape"])
-        res_y = text["shape"][0]
-        res_x = text["shape"][1]
-        glBindTexture(GL_TEXTURE_2D, self._color_texture.id)
-        if self._color_texture.res_x != res_x  or self._color_texture.res_y != res_y:
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, res_x, res_y, 0, GL_RGBA, GL_UNSIGNED_BYTE, img)
-            self._color_texture.res_x = res_x
-            self._color_texture.res_y = res_y
-        else:
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, res_x, res_y, GL_RGBA, GL_UNSIGNED_BYTE, img)
-        glBindTexture(GL_TEXTURE_2D, 0)
+        self._color_texture.update_rgba(img)
     
     def show_gui(self, draw_list: 'imgui.ImDrawList'=None,
                  pos: tuple=(0.0, 0.0), size: tuple=None, opacity: float=1.0):

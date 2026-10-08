@@ -1,16 +1,27 @@
-import glfw
 import json
 import time
 import threading
 from typing import Optional
 from collections import defaultdict
-from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
-from websockets.sync.server import serve, ServerConnection
-from websockets.sync.client import connect, ClientConnection
 from .types import *
 from .widgets import Widget
-from .gl_context import create_headless_context
+from .gl_context import create_headless_context, NullContext
 from abc import ABC, abstractmethod
+
+# The browser build (see `types.IS_WEB`) has neither glfw nor `websockets`;
+# both are only needed by the native SERVER / CLIENT / LOCAL paths.
+try:
+    import glfw
+except ImportError:
+    glfw = None
+try:
+    from websockets.exceptions import ConnectionClosed, ConnectionClosedOK, ConnectionClosedError
+    from websockets.sync.server import serve, ServerConnection
+    from websockets.sync.client import connect, ClientConnection
+except ImportError:
+    from .web import ConnectionClosed
+    ConnectionClosedOK = ConnectionClosedError = ConnectionClosed
+    ServerConnection = ClientConnection = None
 
 class Viewer(ABC):
     """
@@ -44,7 +55,7 @@ class Viewer(ABC):
         if self.mode & LOCAL_CLIENT:
             self.import_client_modules()
             assert self.parent_import_server_modules_called, \
-                "Call to `super().import_client_modules()` missing." 
+                "Call to `super().import_client_modules()` missing."
 
     def _setup(self):
         """ Go over all of the widgets and initialize them """
@@ -58,7 +69,7 @@ class Viewer(ABC):
         for _, widget in vars(self).items():
             if isinstance(widget, Widget):
                 widget.destroy()
-    
+
     def _main(self, websocket=None):
         """
         TODO: Update
@@ -67,24 +78,35 @@ class Viewer(ABC):
         """
         if self.mode is CLIENT and self.websocket is not None:
             try:
-                self._client_send(self.websocket)
+                # The exchange is lockstep: one client update, one server reply.
+                # A native socket enforces that by blocking in recv; the browser
+                # socket never blocks, so it must not send again until the
+                # reply to the previous update has been consumed.
+                if not IS_WEB or self.websocket.ready_to_send:
+                    self._send_update(self.websocket, "client")
             except ConnectionClosed:
                 print("INFO: Server disconnected")
                 self.websocket.close()
                 self.websocket = None
 
         if self.mode is SERVER:
-            self._server_recv(websocket)
+            self._dispatch_update(self._recv_update(websocket), "server")
 
         if self.mode & LOCAL_SERVER:
             self.step()
 
         if self.mode is SERVER:
-            self._server_send(websocket)
+            self._send_update(websocket, "server")
 
         if self.mode is CLIENT and self.websocket is not None:
             try:
-                self._client_recv(self.websocket)
+                if IS_WEB:
+                    # None until a whole update has arrived; keep the last frame.
+                    messages = self.websocket.recv_update()
+                else:
+                    messages = self._recv_update(self.websocket)
+                if messages is not None:
+                    self._dispatch_update(messages, "client")
             except ConnectionClosed:
                 print("INFO: Server disconnected")
                 self.websocket.close()
@@ -92,7 +114,7 @@ class Viewer(ABC):
 
         if self.mode & LOCAL_CLIENT:
             self.show_gui()
-    
+
     def _server_loop(self, websocket: ServerConnection):
         """ Internal method which runs the server loop. """
         # We only allow one client to connect at a time (for now).
@@ -118,76 +140,84 @@ class Viewer(ABC):
 
         self._gl.release()
 
-    def _server_send(self, websocket: ServerConnection):
+    # Wire format of one update, in either direction: a JSON metadata message
+    # keyed by widget id, a JSON list mapping each following binary message to
+    # its widget id, then one binary message per entry of that list.
+
+    def _send_update(self, websocket, side: str):
         """
-        Internal method which goes over all of the registered widgets to compile 
-        and send the server state to the client.
+        Compile the state of all registered widgets and the viewer itself and
+        send it over `websocket`. `side` is "server" or "client" and selects
+        the `<side>_send` hooks.
         """
         metadata = {}   # Metadata for each widget (Should be JSON serializable)
         all_binaries = []   # List of all binaries to be sent
         binary_to_widget = []   # Mapping of which binary is for which widget
         for _, widget in vars(self).items():
             if isinstance(widget, Widget):
-                binary, text = widget.server_send()
+                binary, text = getattr(widget, f"{side}_send")()
                 if text is not None:
                     metadata[widget.widget_id] = text
                 if binary is not None:
                     all_binaries.append(binary)
                     binary_to_widget.append(widget.widget_id)
-        
+
         # Add global state (viewer)
-        binary, text = self.server_send()
+        binary, text = getattr(self, f"{side}_send")()
         if text is not None:
             metadata["viewer"] = text
         if binary is not None:
             all_binaries.append(binary)
             binary_to_widget.append("viewer")
-        
-        # Send metadata
+
         websocket.send(json.dumps(metadata), text=True)
-
-        # Send binary mapping
         websocket.send(json.dumps(binary_to_widget), text=True)
-
-        # Send binaries
         for binary in all_binaries:
             websocket.send(binary, text=False)
 
-    def _server_recv(self, websocket: ServerConnection):
-        """
-        Internal method which receives state from the client and updates all of
-        the widgets.
-        """
-        # Receive metadata
-        metadata = json.loads(websocket.recv())
+    @staticmethod
+    def _recv_update(websocket) -> list:
+        """ Block until one whole update has been received; return its messages. """
+        metadata = websocket.recv()
+        binary_to_widget = websocket.recv()
+        binaries = [websocket.recv() for _ in json.loads(binary_to_widget)]
+        return [metadata, binary_to_widget] + binaries
 
-        # Receive binary mapping
-        binary_to_widget = json.loads(websocket.recv())
-
-        # Receive binaries
-        all_binaries = []
-        for _ in binary_to_widget:
-            binary = websocket.recv()
-            all_binaries.append(binary)
+    def _dispatch_update(self, messages: list, side: str):
+        """
+        Hand the messages of one received update to the widgets they belong
+        to, through their `<side>_recv` hooks ("server" or "client").
+        """
+        metadata = json.loads(messages[0])
+        binary_to_widget = json.loads(messages[1])
+        all_binaries = messages[2:]
 
         # Assemble the data
         all_data = defaultdict(dict)
-        for widget_id, metadata in metadata.items():
+        for widget_id, text in metadata.items():
             if widget_id == "viewer":
-                all_data["viewer"]["metadata"] = metadata
+                all_data["viewer"]["metadata"] = text
             else:
-                all_data[int(widget_id)]["metadata"] = metadata
+                all_data[int(widget_id)]["metadata"] = text
         for widget_id, binary in zip(binary_to_widget, all_binaries):
             all_data[widget_id]["binary"] = binary
 
         # Update the widgets
         for widget_id, data in all_data.items():
             if widget_id == "viewer":
-                self.server_recv(data.get("binary", None), data.get("metadata", None))
+                target = self
             else:
-                widget = self.widget_id_to_widget[int(widget_id)]
-                widget.server_recv(data.get("binary", None), data.get("metadata", None))
-    
+                target = self.widget_id_to_widget[int(widget_id)]
+            getattr(target, f"{side}_recv")(data.get("binary", None), data.get("metadata", None))
+
+    def _connected(self, websocket):
+        """ Finish a client connection: run `onconnect`, then publish the socket. """
+        print("INFO: Connected to server.")
+        self.onconnect(websocket)
+        # Make websocket available after onconnect finishes to avoid
+        # the main thread from using it
+        self.websocket = websocket
+
     def _client_loop(self, ip: str, port: int):
         """
         Internal method which runs the client loop. This loop only deals with
@@ -198,88 +228,29 @@ class Viewer(ABC):
             # Try to connect to the server
             if self.websocket is None:
                 try:
-                    websocket = connect(f"ws://{ip}:{port}", max_size=None, compression=None)
-                    print("INFO: Connected to server.")
-                    self.onconnect(websocket)
-                    # Make websocket available after onconnect finishes to avoid
-                    # the main thread from usinng it
-                    self.websocket = websocket  
+                    self._connected(connect(f"ws://{ip}:{port}", max_size=None, compression=None))
                 except Exception as e:
                     print(f"INFO: Failed to connect to server with error: {e}."
                         " Retrying in 2 seconds.")
                     self.websocket = None
             time.sleep(2)
 
-    def _client_send(self, websocket: ClientConnection):
-        """
-        Internal method which goes over all of the registered widgets to compile
-        and send the client state to the server.
-        """
-        metadata = {}   # Metadata for each widget (Should be JSON serializable)
-        all_binaries = []   # List of all binaries to be sent
-        binary_to_widget = []   # Mapping of which binary is for which widget
-        for _, widget in vars(self).items():
-            if isinstance(widget, Widget):
-                binary, text = widget.client_send()
-                if text is not None:
-                    metadata[widget.widget_id] = text
-                if binary is not None:
-                    all_binaries.append(binary)
-                    binary_to_widget.append(widget.widget_id)
-        
-        # Add global state (viewer)
-        binary, text = self.client_send()
-        if text is not None:
-            metadata["viewer"] = text
-        if binary is not None:
-            all_binaries.append(binary)
-            binary_to_widget.append("viewer")
-        
-        # Send metadata
-        websocket.send(json.dumps(metadata), text=True)
+    async def _web_client_loop(self, ip: str, port: int):
+        """ `_client_loop` for the browser, where there are no threads. """
+        import asyncio
+        from .web import BrowserWebSocket
+        while True:
+            if self.websocket is None:
+                try:
+                    websocket = BrowserWebSocket(f"ws://{ip}:{port}")
+                    await websocket.wait_open()
+                    self._connected(websocket)
+                except Exception as e:
+                    print(f"INFO: Failed to connect to server with error: {e}."
+                        " Retrying in 2 seconds.")
+                    self.websocket = None
+            await asyncio.sleep(2)
 
-        # Send binary mapping
-        websocket.send(json.dumps(binary_to_widget), text=True)
-
-        # Send binaries
-        for binary in all_binaries:
-            websocket.send(binary, text=False)
-
-    def _client_recv(self, websocket: ClientConnection):
-        """
-        Internal method which receives state from the server and updates all of
-        the widgets.
-        """
-        # Receive metadata
-        metadata = json.loads(websocket.recv())
-
-        # Receive binary mapping
-        binary_to_widget = json.loads(websocket.recv())
-
-        # Receive binaries
-        all_binaries = []
-        for _ in binary_to_widget:
-            binary = websocket.recv()
-            all_binaries.append(binary)
-
-        # Assemble the data
-        all_data = defaultdict(dict)
-        for widget_id, metadata in metadata.items():
-            if widget_id == "viewer":
-                all_data["viewer"]["metadata"] = metadata
-            else:
-                all_data[int(widget_id)]["metadata"] = metadata
-        for widget_id, binary in zip(binary_to_widget, all_binaries):
-            all_data[widget_id]["binary"] = binary
-
-        # Update the widgets
-        for widget_id, data in all_data.items():
-            if widget_id == "viewer":
-                self.client_recv(data.get("binary", None), data.get("metadata", None))
-            else:
-                widget = self.widget_id_to_widget[int(widget_id)]
-                widget.client_recv(data.get("binary", None), data.get("metadata", None))
-    
     def onconnect(self, websocket: ClientConnection|ServerConnection):
         """ Called when a new connection is made. """
         pass
@@ -290,10 +261,14 @@ class Viewer(ABC):
 
         # Run the client connection in a different thread, the main thread runs the GUI.
         if self.mode is CLIENT:
-            connect_thread = threading.Thread(target=self._client_loop, args=(ip, port))
-            # Make the thread a daemon so that it exits when the main thread exits.
-            connect_thread.daemon = True
-            connect_thread.start()
+            if IS_WEB:
+                import asyncio
+                asyncio.ensure_future(self._web_client_loop(ip, port))
+            else:
+                connect_thread = threading.Thread(target=self._client_loop, args=(ip, port))
+                # Make the thread a daemon so that it exits when the main thread exits.
+                connect_thread.daemon = True
+                connect_thread.start()
         if self.mode & LOCAL_CLIENT:
             self._runner_params = hello_imgui.RunnerParams()
             self._runner_params.fps_idling.enable_idling = False
@@ -305,14 +280,17 @@ class Viewer(ABC):
             # self._runner_params.callbacks.before_exit = self._before_exit
             self._runner_params.callbacks.show_gui = self._main
             self._runner_params.callbacks.show_status = self.show_status
-            # Disable VSync
-            self._runner_params.callbacks.post_init_add_platform_backend_callbacks = lambda: glfw.swap_interval(0)
-            self._runner_params.platform_backend_type = hello_imgui.PlatformBackendType.glfw
+            if glfw is not None:
+                # Disable VSync
+                self._runner_params.callbacks.post_init_add_platform_backend_callbacks = lambda: glfw.swap_interval(0)
+                self._runner_params.platform_backend_type = hello_imgui.PlatformBackendType.glfw
             self._addon_params = immapp.AddOnsParams(with_implot=True)
 
             # This is required to make 'want_capture_*' work. The default value is to create a full screen window,
             # but that would mean the 'want_capture_mouse' variable will always be set.
             self._runner_params.imgui_window_params.default_imgui_window_type = hello_imgui.DefaultImGuiWindowType.provide_full_screen_dock_space
+            # In the browser imgui_bundle patches `run` to return at once and
+            # drive the frames from the page's animation loop instead.
             immapp.run(self._runner_params, self._addon_params)
         if self.mode is SERVER:
             # SERVER renders the widgets' offscreen framebuffers and streams them,
@@ -323,7 +301,13 @@ class Viewer(ABC):
             # sprites off, so `gl_PointCoord` reads (0,0) in fragment shaders and
             # widgets that rely on it (e.g. PointRenderer's disc test) discard every
             # fragment.
-            self._gl = create_headless_context()
+            try:
+                self._gl = create_headless_context()
+            except RuntimeError as e:
+                # Only widgets that render need a context; a server made of
+                # image/camera widgets can run on a host without OpenGL.
+                print(f"WARNING: {e} OpenGL widgets will not work.")
+                self._gl = NullContext()
             self._gl.make_current()
             self._setup()
 
@@ -356,11 +340,11 @@ class Viewer(ABC):
 
     def create_widgets(self):
         """ Define stateful widgets here. """
-    
+
     def server_send(self) -> tuple[Optional[bytes],Optional[dict]]:
         """ Send global viewer state to the client. """
         return None, None
-    
+
     def server_recv(self, binary: Optional[bytes], text: Optional[dict]):
         """ Receive and process global viewer state from the client. """
 
@@ -377,16 +361,16 @@ class Viewer(ABC):
 
     def import_server_modules(self):
         """
-        Import server specific modules here. We want the viewer to run without 
+        Import server specific modules here. We want the viewer to run without
         any additional dependancies so we only import the server modules when
         on the server. The modules imported here can only be used in `step` and
-        `server*` methods. Don't forget to declare the variables as `global` to 
+        `server*` methods. Don't forget to declare the variables as `global` to
         ensure that they are globally accesible.
         """
-    
+
     def import_client_modules(self):
         """
-        Import client specific modules here. We want the viewer to run without 
+        Import client specific modules here. We want the viewer to run without
         needing to install `imgui_bundle` on the server. The modules imported
         here can only be used in `show_gui` and `client*` methods. Don't forget
         to declare the variables as `global` to  ensure that they are globally

@@ -35,6 +35,15 @@ The viewer can run in three different modes:
 - `SERVER`: Creates a websocket server on the device which would perform all of the computation to be displayed on another device.
 - `CLIENT`: Opens a window to display the GUI and connects to the websocket server.
 
+`CLIENT` also runs in a browser under [Pyodide](https://pyodide.org) with the
+wasm build of `imgui-bundle`: the same viewer class, the same protocol, no
+server change. The browser has no PyOpenGL, `glfw`, `websockets` or threads;
+`graphdecoviewer.types.IS_WEB` selects the substitutes (`graphdecoviewer/web.py`
+wraps the page's `WebSocket`, `Texture2D.update_rgba` uploads images through
+HelloImGui). Install `numpy`, `pillow` and `imgui-bundle` in Pyodide, unpack this
+package into its filesystem, construct the viewer in `CLIENT` mode and call
+`run(host, port)`; `immapp.run` returns at once there and the page drives the frames.
+
 ### Creating a new Viewer
 To create a new viewer, you must inherit from the `Viewer` class and override the following function:
 - `__init__`: If you override this function, you must necessarily call the `__init__` of the parent class using `super().__init__(mode)` to ensure the state variables and appropriate modules are imported.

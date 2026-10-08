@@ -23,6 +23,19 @@ every fragment.
 OPENGL_VERSION = (3, 3)
 
 
+class NullContext:
+    """Placeholder for a server that could not get a context (no GL on the host)."""
+
+    def make_current(self):
+        pass
+
+    def release(self):
+        pass
+
+    def destroy(self):
+        pass
+
+
 class GLFWContext:
     """Hidden-window GLFW context (works when a display is available)."""
 
