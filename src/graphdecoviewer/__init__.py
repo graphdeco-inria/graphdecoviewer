@@ -310,7 +310,11 @@ class Viewer(ABC):
                 self._gl = create_headless_context()
             except RuntimeError as e:
                 # Only widgets that render need a context; a server made of
-                # image/camera widgets can run on a host without OpenGL.
+                # image/camera widgets can run on a host without OpenGL. One
+                # that does render must still fail here, with the diagnostic,
+                # rather than deeper inside widget setup.
+                if any(w.needs_gl for w in vars(self).values() if isinstance(w, Widget)):
+                    raise
                 print(f"WARNING: {e} OpenGL widgets will not work.")
                 self._gl = NullContext()
             self._gl.make_current()

@@ -5,6 +5,10 @@ from abc import ABC, abstractmethod
 class Widget(ABC):
     id = 0
 
+    # True for widgets that render with OpenGL, so a SERVER made only of
+    # widgets without it can run on a host with no GL at all.
+    needs_gl = False
+
     def __init__(self, mode: ViewerMode):
         self.mode = mode
         self.widget_id = Widget.id

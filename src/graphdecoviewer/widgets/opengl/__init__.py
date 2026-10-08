@@ -12,6 +12,8 @@ class OpenGLWidget(Widget):
     Virtual class for widgets that require rendering with OpenGL. It handles creation and deletion
     of shaders and renderbuffer. It also implements sending and receiving the renders in remote mode.
     """
+    needs_gl = True
+
     def __init__(self, vertex_shader: str, fragment_shader: str, mode: ViewerMode):
     # If the device doesn't support OpenGL, this will be `False`.
         self.enabled = False
