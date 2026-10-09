@@ -21,8 +21,8 @@ from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-PAGE = Path(__file__).resolve().parent / "client.html"
 PACKAGE_DIR = Path(__file__).resolve().parent
+PAGE = PACKAGE_DIR / "client.html"
 
 
 def zip_python(*roots: Path) -> bytes:
