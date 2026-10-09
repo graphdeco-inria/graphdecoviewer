@@ -32,11 +32,20 @@ class Viewer(ABC):
     The '(server|client)_(send|recv)' should be used for message passing between
     the server and client for remote viewer support.
     """
+    # Modules the browser client needs besides graphdecoviewer and the one
+    # that defines the viewer, as import names (see `web_server.py`).
+    web_client_modules: list[str] = []
+
     def __init__(self, mode: ViewerMode):
         if not hasattr(self, "window_title"):
             self.window_title = "Viewer"
         self.should_exit = False
         self.num_connections = 0
+
+        # WEB is a SERVER that also serves the page its client runs in.
+        self.serve_web_client = mode is WEB
+        if self.serve_web_client:
+            mode = SERVER
 
         # Only used in client mode
         self.websocket = None
@@ -260,7 +269,13 @@ class Viewer(ABC):
         """ Called when a new connection is made. """
         pass
 
-    def run(self, ip: str = "localhost", port: int = 6009):
+    @classmethod
+    def web_client(cls, mode: ViewerMode):
+        """Build this viewer for the browser client, which knows only the mode.
+        Override it if the constructor needs more (see `web_server.py`)."""
+        return cls(mode)
+
+    def run(self, ip: str = "localhost", port: int = 6009, web_port: int = 8000):
         self.create_widgets()
         self.running = True
 
@@ -323,6 +338,12 @@ class Viewer(ABC):
             # Release the context so the server thread can make it current.
             self._gl.release()
 
+            page_server = None
+            if self.serve_web_client:
+                from .web_server import client_url, serve_client
+                page_server = serve_client(type(self), ip, web_port, port)
+                print(f"INFO: Open the viewer at {client_url(ip, web_port)}")
+
             # Start server
             with serve(self._server_loop, ip, port, max_size=None, compression=None) as server:
                 server_thread = threading.Thread(target=server.serve_forever)
@@ -335,6 +356,9 @@ class Viewer(ABC):
                         server.shutdown()
                         server_thread.join()
                         break
+
+            if page_server is not None:
+                page_server.shutdown()
 
             # Reacquire the context and free resources
             self._gl.make_current()

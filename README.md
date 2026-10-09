@@ -30,19 +30,40 @@ If you use this software in your publication, please consider citing it:
 ```
 
 ## Usage
-The viewer can run in three different modes:
+The viewer can run in four different modes:
 - `LOCAL`: Opens a window on the same device.
 - `SERVER`: Creates a websocket server on the device which would perform all of the computation to be displayed on another device.
 - `CLIENT`: Opens a window to display the GUI and connects to the websocket server.
+- `WEB`: A `SERVER` that also serves its own browser client, and prints the link to open.
 
-`CLIENT` also runs in a browser under [Pyodide](https://pyodide.org) with the
+### Browser client (`WEB` mode)
+
+`CLIENT` also runs in a browser through [Pyodide](https://pyodide.org) and the
 wasm build of `imgui-bundle`: the same viewer class, the same protocol, no
-server change. The browser has no PyOpenGL, `glfw`, `websockets` or threads;
+server change. `WEB` mode is that whole setup in one process -- it starts the
+websocket server *and* an http server for the page, and nothing has to be
+deployed:
+
+```python
+MyViewer(WEB).run("0.0.0.0", 6009, web_port=8000)
+# INFO: Open the viewer at http://<this machine>:8000/
+```
+
+The page is generic over the viewer: `web_server.py` hands it the class to
+construct (`app.json`), this package's source (`graphdecoviewer.zip`) and the
+module that defines the viewer (`app.zip`), all generated per request from the
+live source tree, so a checkout's own code is what runs in the browser. A
+viewer whose browser client needs further modules of its own lists them in
+`web_client_modules`; one whose constructor needs more than the mode overrides
+the `web_client` classmethod. `?host=&port=` on the page's URL override the
+server to dial, which is how you reach one through an SSH tunnel.
+
+The browser has no PyOpenGL, `glfw`, `websockets` or threads;
 `graphdecoviewer.types.IS_WEB` selects the substitutes (`graphdecoviewer/web.py`
 wraps the page's `WebSocket`, `Texture2D.update_rgba` uploads images through
-HelloImGui). Install `numpy`, `pillow` and `imgui-bundle` in Pyodide, unpack this
-package into its filesystem, construct the viewer in `CLIENT` mode and call
-`run(host, port)`; `immapp.run` returns at once there and the page drives the frames.
+HelloImGui) and `immapp.run` returns at once, the page driving the frames.
+Pyodide's Python/Emscripten ABI has to match the `imgui-bundle` wasm wheel the
+page installs; both are pinned in `client.html`.
 
 ### Creating a new Viewer
 To create a new viewer, you must inherit from the `Viewer` class and override the following function:
@@ -87,5 +108,6 @@ Following is the list of widgets which are available/planned to be included in t
   `imgui-bundle` is no longer installed by default. All imports from `imgui-bundle` must happen in `import_client_module` and they can only be used in `show_gui` and `client_(send|recv)`. This allows installation of the package on systems which don't have packages to build `imgui-bundle` from scratch.
 
 - [x] Fix bug causing issue in remote mode.
+- [x] Run `CLIENT` in a browser, and add `WEB` mode to serve it.
 - [ ] Add `PointRenderer`.
 - [ ] Add `ImageCompare`

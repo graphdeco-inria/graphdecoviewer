@@ -26,11 +26,16 @@ class ViewerMode(IntFlag):
     LOCAL = auto()
     SERVER = auto()
     CLIENT = auto()
+    # A SERVER that also serves its own browser client over http (see
+    # `web_server.py`). `Viewer.__init__` records the request and keeps
+    # `self.mode` at SERVER, so nothing downstream has to know about it.
+    WEB = auto()
 
 # Aliases for easy access
 LOCAL = ViewerMode.LOCAL
 CLIENT = ViewerMode.CLIENT
 SERVER = ViewerMode.SERVER
+WEB = ViewerMode.WEB
 LOCAL_SERVER = ViewerMode.LOCAL | ViewerMode.SERVER
 LOCAL_CLIENT = ViewerMode.LOCAL | ViewerMode.CLIENT
 
