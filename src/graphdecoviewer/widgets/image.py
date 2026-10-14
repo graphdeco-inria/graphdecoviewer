@@ -111,6 +111,11 @@ class Image(Widget):
         self.img = img
         self.step_called = True
 
+    def onconnect(self, websocket):
+        """ Send the current image again to the new client. """
+        if self.mode is not CLIENT and self.img is not None:
+            self.step_called = True
+
     @abstractmethod
     def _upload(self):
         """

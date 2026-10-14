@@ -117,6 +117,11 @@ class OpenGLWidget(Widget):
             glDeleteFramebuffers(1, int(self._fbo))
         glDeleteProgram(self._shader)
 
+    def onconnect(self, websocket):
+        """ Send the last render again to the new client. """
+        if self.mode is not CLIENT and self._fbo is not None:
+            self.step_called = True
+
     def server_send(self):
         if not self.step_called:
             return None, None

@@ -32,12 +32,20 @@ class Widget(ABC):
     def children(self) -> list["Widget"]:
         """
         Widgets owned by this one. The viewer registers them (recursively) like
-        its own attributes: they are set up and synced. A widget held by two
-        owners is registered once. The owner still draws them in its `show_gui`
-        and steps them on the server. Create them in `__init__`, in the same
-        order on both sides, as widget ids follow creation order.
+        its own attributes: they are set up, synced and told about connections.
+        A widget held by two owners is registered once. The owner still draws
+        them in its `show_gui` and steps them on the server. Create them in
+        `__init__`, in the same order on both sides, as widget ids follow
+        creation order.
         """
         return []
+
+    def onconnect(self, websocket):
+        """
+        Called on both sides when a client connects, before `Viewer.onconnect`.
+        A server-side widget that only sends on change uses it to forget what
+        it has sent, so the new client receives its full state.
+        """
 
     def server_send(self) -> tuple[Optional[bytes], Optional[dict]]:
         """

@@ -87,6 +87,7 @@ To create a new widget, you must inherit from the `Widget` class and override th
 - `(client|server)_send`: Same as `Viewer.(client|server)_send`.
 - `(client|server)_recv`: Same as `Viewer.(client|server)_recv`.
 - `children`: Return the widgets this one owns. The viewer registers them recursively, like its own widget attributes, so a panel can hold its images or camera itself; it still draws and steps them. Create them in `__init__`, in the same order on client and server (widget ids follow creation order). A widget shared by two owners is registered once.
+- `onconnect`: Called on both sides when a client connects, before `Viewer.onconnect`. A widget that only sends on change uses it to send its full state again. `NumpyImage`, `TorchImage` and the OpenGL widgets re-send their last frame.
 
 ## Widgets
 Following is the list of widgets which are available/planned to be included in the viewer by default.
@@ -111,5 +112,6 @@ Following is the list of widgets which are available/planned to be included in t
 - [x] Fix bug causing issue in remote mode.
 - [x] Run `CLIENT` in a browser, and add `WEB` mode to serve it.
 - [x] Add `Widget.children`: widgets can own widgets.
+- [x] Add `Widget.onconnect`: a new client gets each widget's full state, images included.
 - [ ] Add `PointRenderer`.
 - [ ] Add `ImageCompare`

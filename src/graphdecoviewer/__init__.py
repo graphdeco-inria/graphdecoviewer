@@ -91,6 +91,12 @@ class Viewer(ABC):
         for widget in self.widgets():
             widget.destroy()
 
+    def _onconnect(self, websocket):
+        """ Tell the widgets, then the viewer, about a new connection. """
+        for widget in self.widgets():
+            widget.onconnect(websocket)
+        self.onconnect(websocket)
+
     def _main(self, websocket=None):
         """
         TODO: Update
@@ -146,7 +152,7 @@ class Viewer(ABC):
         self.num_connections += 1
 
         self._gl.make_current()
-        self.onconnect(websocket)
+        self._onconnect(websocket)
 
         # Main Loop
         try:
@@ -233,7 +239,7 @@ class Viewer(ABC):
     def _connected(self, websocket):
         """ Finish a client connection: run `onconnect`, then publish the socket. """
         print("INFO: Connected to server.")
-        self.onconnect(websocket)
+        self._onconnect(websocket)
         # Make websocket available after onconnect finishes to avoid
         # the main thread from using it
         self.websocket = websocket
