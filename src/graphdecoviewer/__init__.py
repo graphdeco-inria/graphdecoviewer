@@ -66,18 +66,30 @@ class Viewer(ABC):
             assert self.parent_import_server_modules_called, \
                 "Call to `super().import_client_modules()` missing."
 
+    def widgets(self) -> list[Widget]:
+        """ The viewer's widget attributes and, recursively, their `children`, each once. """
+        found = {}
+        def visit(widget):
+            if id(widget) in found:
+                return
+            found[id(widget)] = widget
+            for child in widget.children():
+                visit(child)
+        for value in vars(self).values():
+            if isinstance(value, Widget):
+                visit(value)
+        return list(found.values())
+
     def _setup(self):
         """ Go over all of the widgets and initialize them """
-        for _, widget in vars(self).items():
-            if isinstance(widget, Widget):
-                widget.setup()
-                self.widget_id_to_widget[widget.widget_id] = widget
+        for widget in self.widgets():
+            widget.setup()
+            self.widget_id_to_widget[widget.widget_id] = widget
 
     def _destroy(self):
         """ Go over all of the widgets and free any manually allocated objects """
-        for _, widget in vars(self).items():
-            if isinstance(widget, Widget):
-                widget.destroy()
+        for widget in self.widgets():
+            widget.destroy()
 
     def _main(self, websocket=None):
         """
@@ -162,14 +174,13 @@ class Viewer(ABC):
         metadata = {}   # Metadata for each widget (Should be JSON serializable)
         all_binaries = []   # List of all binaries to be sent
         binary_to_widget = []   # Mapping of which binary is for which widget
-        for _, widget in vars(self).items():
-            if isinstance(widget, Widget):
-                binary, text = getattr(widget, f"{side}_send")()
-                if text is not None:
-                    metadata[widget.widget_id] = text
-                if binary is not None:
-                    all_binaries.append(binary)
-                    binary_to_widget.append(widget.widget_id)
+        for widget in self.widgets():
+            binary, text = getattr(widget, f"{side}_send")()
+            if text is not None:
+                metadata[widget.widget_id] = text
+            if binary is not None:
+                all_binaries.append(binary)
+                binary_to_widget.append(widget.widget_id)
 
         # Add global state (viewer)
         binary, text = getattr(self, f"{side}_send")()
@@ -328,7 +339,7 @@ class Viewer(ABC):
                 # image/camera widgets can run on a host without OpenGL. One
                 # that does render must still fail here, with the diagnostic,
                 # rather than deeper inside widget setup.
-                if any(w.needs_gl for w in vars(self).values() if isinstance(w, Widget)):
+                if any(w.needs_gl for w in self.widgets()):
                     raise
                 print(f"WARNING: {e} OpenGL widgets will not work.")
                 self._gl = NullContext()

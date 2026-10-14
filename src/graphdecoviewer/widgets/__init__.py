@@ -29,6 +29,16 @@ class Widget(ABC):
         This function won't be called when application is running in headless mode.
         """
 
+    def children(self) -> list["Widget"]:
+        """
+        Widgets owned by this one. The viewer registers them (recursively) like
+        its own attributes: they are set up and synced. A widget held by two
+        owners is registered once. The owner still draws them in its `show_gui`
+        and steps them on the server. Create them in `__init__`, in the same
+        order on both sides, as widget ids follow creation order.
+        """
+        return []
+
     def server_send(self) -> tuple[Optional[bytes], Optional[dict]]:
         """
         Send widget state to the client.
