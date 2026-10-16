@@ -3,7 +3,10 @@ import numpy as np
 from typing import Optional
 from PIL import Image as _PILImage
 from . import Widget
-from OpenGL.GL import *
+try:
+    from OpenGL.GL import *
+except ImportError:   # browser: display goes through `Texture2D.update_rgba`
+    pass
 from abc import abstractmethod
 from ..types import *
 
@@ -84,7 +87,7 @@ class Image(Widget):
 
     def setup(self):
         """ Create OpenGL texture to be displayed. """
-        if self.mode & LOCAL_CLIENT:
+        if self.mode & LOCAL_CLIENT and HAS_GL:
             self.texture.id = glGenTextures(1)
             glBindTexture(GL_TEXTURE_2D, self.texture.id)
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
@@ -95,7 +98,7 @@ class Image(Widget):
     
     def destroy(self):
         """ Delete the texture. """
-        if self.mode & LOCAL_CLIENT:
+        if self.mode & LOCAL_CLIENT and HAS_GL:
             glDeleteTextures(1, int(self.texture.id))
 
     def step(self, img):
@@ -108,6 +111,11 @@ class Image(Widget):
         self.img = img
         self.step_called = True
 
+    def onconnect(self, websocket):
+        """ Send the current image again to the new client. """
+        if self.mode is not CLIENT and self.img is not None:
+            self.step_called = True
+
     @abstractmethod
     def _upload(self):
         """
@@ -119,7 +127,6 @@ class Image(Widget):
         if self.img is None:
             return
 
-        glBindTexture(GL_TEXTURE_2D, self.texture.id)
         self._upload()
 
         if res_x <= 0:
@@ -143,12 +150,7 @@ class NumpyImage(Image):
         img = self.img
         if img.dtype != np.uint8:
             img = (np.clip(img, 0, 1) * 255).astype(np.uint8)
-        if img.shape[1] != self.texture.res_x or img.shape[0] != self.texture.res_y:
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, img.shape[1], img.shape[0], 0, GL_RGB, GL_UNSIGNED_BYTE, img)
-            self.texture.res_x = img.shape[1]
-            self.texture.res_y = img.shape[0]
-        else:
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.shape[1], img.shape[0], GL_RGB, GL_UNSIGNED_BYTE, img)
+        self.texture.update_rgba(img)
     
     def server_send(self):
         if not self.step_called:
@@ -199,6 +201,7 @@ if enable_torch_image:
             if img.dtype != torch.uint8:
                 img = (torch.clip(img, 0, 1) * 255).byte()
 
+            glBindTexture(GL_TEXTURE_2D, self.texture.id)
             if img.shape[1] != self.texture.res_x or img.shape[0] != self.texture.res_y:
                 if self._cuda_resource is not None:
                     checkCudaErrors(driver.cuGraphicsUnregisterResource(self._cuda_resource))

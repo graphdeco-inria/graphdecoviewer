@@ -1,8 +1,11 @@
 import ctypes
 import numpy as np
 from . import OpenGLWidget
-from OpenGL.GL import *
-from ...types import ViewerMode, Texture2D
+try:
+    from OpenGL.GL import *
+except ImportError:   # browser: thin client, nothing below `setup` runs
+    pass
+from ...types import ViewerMode, CLIENT, Texture2D
 from ..cameras import Camera
 
 _vert_shader = """
@@ -128,6 +131,8 @@ class PointRenderer(OpenGLWidget):
 
     def setup(self):
         super().setup()
+        if self.mode is CLIENT:
+            return
 
         # Cache uniform locations once (valid after the shader is linked).
         self._uniforms = {

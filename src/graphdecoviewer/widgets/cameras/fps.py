@@ -1,4 +1,7 @@
-import glfw
+try:
+    import glfw
+except ImportError:   # browser
+    glfw = None
 import numpy as np
 import logging
 from . import Camera
@@ -37,20 +40,17 @@ class FPSCamera(Camera):
 
     def setup(self):
         if self.mode != ViewerMode.SERVER:
-            self.movement_keys = {
-                "w": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_W))],
-                "a": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_A))],
-                "s": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_S))],
-                "d": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_D))],
-                "q": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_Q))],
-                "e": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_E))],
-                "j": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_J))],
-                "k": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_K))],
-                "l": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_L))],
-                "i": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_I))],
-                "o": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_O))],
-                "u": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_U))],
-            }
+            keys = "wasdqejkliou"
+            if glfw is None:
+                # No scancode lookup without glfw: assume a US layout.
+                self.movement_keys = {k: imgui.Key[k] for k in keys}
+            else:
+                # Map by physical position so WASD stays in place on other layouts.
+                self.movement_keys = {
+                    k: imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN,
+                                                   glfw.get_key_scancode(getattr(glfw, f"KEY_{k.upper()}")))]
+                    for k in keys
+                }
 
     def process_mouse_input(self) -> bool:
         if imgui.is_mouse_dragging(0):

@@ -5,6 +5,10 @@ from abc import ABC, abstractmethod
 class Widget(ABC):
     id = 0
 
+    # True for widgets that render with OpenGL, so a SERVER made only of
+    # widgets without it can run on a host with no GL at all.
+    needs_gl = False
+
     def __init__(self, mode: ViewerMode):
         self.mode = mode
         self.widget_id = Widget.id
@@ -23,6 +27,24 @@ class Widget(ABC):
         """
         Destroy any resources created manually in the 'setup' function.
         This function won't be called when application is running in headless mode.
+        """
+
+    def children(self) -> list["Widget"]:
+        """
+        Widgets owned by this one. The viewer registers them (recursively) like
+        its own attributes: they are set up, synced and told about connections.
+        A widget held by two owners is registered once. The owner still draws
+        them in its `show_gui` and steps them on the server. Create them in
+        `__init__`, in the same order on both sides, as widget ids follow
+        creation order.
+        """
+        return []
+
+    def onconnect(self, websocket):
+        """
+        Called on both sides when a client connects, before `Viewer.onconnect`.
+        A server-side widget that only sends on change uses it to forget what
+        it has sent, so the new client receives its full state.
         """
 
     def server_send(self) -> tuple[Optional[bytes], Optional[dict]]:

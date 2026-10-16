@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+A graphdecoviewer CLIENT in the browser (Pyodide + imgui-bundle).
+
+Served by `web_server.py`, which also hands over the viewer class to construct
+(`app.json`), the graphdecoviewer source (`graphdecoviewer.zip`) and the
+viewer's own modules (`app.zip`) -- so this page is the same for every viewer.
+Query parameters override the server to dial: ?host=<host>&port=<port>
+(default: the page's own host and the port in `app.json`). The page is plain
+http, so the socket is plain ws://.
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>graphdecoviewer</title>
+    <!-- Pyodide's Python/Emscripten ABI must match the imgui-bundle wasm wheel
+         installed below (cp314 / pyemscripten_2026_0 for 1.92.900). -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.js"></script>
+    <style>
+        html, body { width: 100%; height: 100%; margin: 0; font-family: sans-serif; }
+        #canvas { display: block; width: 100%; height: 100%; }
+        #loader { position: fixed; inset: 0; display: flex; flex-direction: column;
+                  align-items: center; justify-content: center; gap: 16px;
+                  background: #222; color: #eee; white-space: pre-wrap; }
+        #loader::before { content: ""; width: 48px; height: 48px; border: 5px solid #444;
+                          border-top-color: #eee; border-radius: 50%;
+                          animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div id="loader">Loading Pyodide...</div>
+<canvas id="canvas" tabindex="0"></canvas>
+
+<!-- `web_client` builds the viewer in CLIENT mode (a subclass overrides it if
+     its constructor needs more than the mode); `run` returns at once in the
+     browser, frames are driven by the page. -->
+<script type="text/python" id="pythonCode">
+import importlib
+from graphdecoviewer.types import CLIENT
+
+viewer = getattr(importlib.import_module(app_module), app_class).web_client(CLIENT)
+viewer.run(host, port)
+</script>
+
+<script>
+    const loaderEl = document.getElementById("loader");
+    const setStatus = m => { loaderEl.textContent = m; window.viewerStatus = m; };
+    const showError = e => {
+        loaderEl.style.background = "#922";
+        setStatus("Error: " + (e?.message || e));
+        console.error(e);
+    };
+
+    async function main() {
+        const app = await (await fetch("app.json")).json();
+        const params = new URLSearchParams(location.search);
+        const host = params.get("host") || location.hostname || "localhost";
+        const port = parseInt(params.get("port") || app.port);
+
+        const canvas = document.getElementById("canvas");
+        // Right-click is the viewer's, not the browser menu's.
+        canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+        const pyodide = await loadPyodide();
+        // SDL (imgui-bundle's web backend) renders into this canvas; see
+        // https://pyodide.org/en/stable/usage/sdl.html
+        pyodide.canvas.setCanvas2D(canvas);
+        pyodide._api._skip_unwind_fatal_error = true;
+
+        setStatus("Loading numpy, Pillow...");
+        await pyodide.loadPackage(["numpy", "pillow", "micropip"]);
+
+        setStatus("Loading imgui-bundle (first visit downloads ~20 MB)...");
+        const micropip = pyodide.pyimport("micropip");
+        await micropip.install("imgui-bundle==1.92.900");
+
+        setStatus(`Loading graphdecoviewer and ${app.class}...`);
+        for (const archive of ["graphdecoviewer.zip", "app.zip"]) {
+            const zip = await (await fetch(archive)).arrayBuffer();
+            pyodide.unpackArchive(zip, "zip");   // into the Python cwd, which is importable
+        }
+
+        setStatus("Starting viewer...");
+        pyodide.globals.set("host", host);
+        pyodide.globals.set("port", port);
+        pyodide.globals.set("app_module", app.module);
+        pyodide.globals.set("app_class", app.class);
+        pyodide.runPython(document.getElementById("pythonCode").textContent);
+        // For tests and the console: the viewer object and its counters.
+        window.viewer = pyodide.globals.get("viewer");
+        loaderEl.remove();
+        window.viewerStatus = "running";
+    }
+    main().catch(showError);
+</script>
+</body>
+</html>
